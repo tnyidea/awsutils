@@ -5,7 +5,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"github.com/fubotv/smo-content-operations/utils/awsutils"
+	"github.com/gbnyc26/awsutils-go"
 	"strings"
 )
 
