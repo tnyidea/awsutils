@@ -50,7 +50,9 @@ func NewS3Object(bucket string, objectKey string, serviceKey string) (S3Object, 
 		return S3Object{}, errors.New("error locating bucket region: " + err.Error())
 	}
 	s3Object.Region = region
-	s3Object.localizeServiceKey()
+	tokens := strings.Split(s3Object.ServiceKey, ":")
+	tokens[0] = s3Object.Region
+	s3Object.ServiceKey = strings.Join(tokens, ":")
 
 	err = s3Object.listObjectV2()
 	if err != nil {
@@ -107,12 +109,6 @@ func (p *S3Object) S3Url() (string, error) {
 	}
 
 	return "s3://" + p.Bucket + "/" + p.ObjectKey, nil
-}
-
-func (p *S3Object) localizeServiceKey() {
-	tokens := strings.Split(p.ServiceKey, ":")
-	tokens[0] = p.Region
-	p.ServiceKey = strings.Join(tokens, ":")
 }
 
 func (p *S3Object) listObjectV2() error {
