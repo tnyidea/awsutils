@@ -10,59 +10,59 @@ import (
 	"time"
 )
 
-type S3ObjectPrefix struct {
+type S3ObjectKeyPrefix struct {
 	ServiceKey string `json:"-"` // Should be private for output
 	Bucket     string `json:"bucket"`
-	Prefix     string `json:"prefix"`
+	Value      string `json:"value"`
 }
 
-func NewS3ObjectPrefix(bucket string, prefix string, serviceKey string) (S3ObjectPrefix, error) {
-	return S3ObjectPrefix{
+func NewS3ObjectPrefix(bucket string, objectKeyPrefix string, serviceKey string) (S3ObjectKeyPrefix, error) {
+	return S3ObjectKeyPrefix{
 		ServiceKey: serviceKey,
 		Bucket:     bucket,
-		Prefix:     prefix,
+		Value:      objectKeyPrefix,
 	}, nil
 }
 
-func NewS3ObjectPrefixFromS3Url(url string, serviceKey string) (S3ObjectPrefix, error) {
+func NewS3ObjectKeyPrefixFromS3Url(url string, serviceKey string) (S3ObjectKeyPrefix, error) {
 	tokens := strings.Split(url, "//")
 	if tokens[0] != "s3:" {
-		return S3ObjectPrefix{}, errors.New("invalid S3 URL: invalid protocol '" + tokens[0] +
-			"'. S3 URL Must be in the form of s3://bucket_name/object_prefix")
+		return S3ObjectKeyPrefix{}, errors.New("invalid S3 URL: invalid protocol '" + tokens[0] +
+			"'. S3 URL Must be in the form of s3://bucket_name/object_key_prefix")
 	}
 
 	tokens = strings.Split(tokens[1], "/")
 	if len(tokens) == 1 {
-		return S3ObjectPrefix{}, errors.New("invalid S3 URL: missing object prefix or bucket. S3 URL Must be in the form of s3://bucket_name/object_prefix")
+		return S3ObjectKeyPrefix{}, errors.New("invalid S3 URL: missing object prefix or bucket. S3 URL Must be in the form of s3://bucket_name/object_prefix")
 	}
 
-	return S3ObjectPrefix{
+	return S3ObjectKeyPrefix{
 		ServiceKey: serviceKey,
 		Bucket:     tokens[0],
-		Prefix:     strings.Join(tokens[1:], "/"),
+		Value:      strings.Join(tokens[1:], "/"),
 	}, nil
 }
 
-func (s *S3ObjectPrefix) Bytes() []byte {
-	b, _ := json.MarshalIndent(s, "", "    ")
+func (p *S3ObjectKeyPrefix) Bytes() []byte {
+	b, _ := json.MarshalIndent(p, "", "    ")
 	return b
 }
 
-func (s *S3ObjectPrefix) String() string {
-	b, _ := json.MarshalIndent(s, "", "    ")
+func (p *S3ObjectKeyPrefix) String() string {
+	b, _ := json.MarshalIndent(p, "", "    ")
 	return string(b)
 }
 
-func (s *S3ObjectPrefix) S3Url() (string, error) {
-	if s.Bucket == "" || s.Prefix == "" {
+func (p *S3ObjectKeyPrefix) S3Url() (string, error) {
+	if p.Bucket == "" || p.Value == "" {
 		return "", errors.New("invalid S3 URL: must specify both Bucket and Object Prefix")
 	}
 
-	return "s3://" + s.Bucket + "/" + s.Prefix, nil
+	return "s3://" + p.Bucket + "/" + p.Value, nil
 }
 
-func (s *S3ObjectPrefix) GetTotalSize() (int64, int64, error) {
-	s3Session, err := NewS3Session(s.ServiceKey)
+func (p *S3ObjectKeyPrefix) GetTotalSize() (int64, int64, error) {
+	s3Session, err := NewS3Session(p.ServiceKey)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -74,8 +74,8 @@ func (s *S3ObjectPrefix) GetTotalSize() (int64, int64, error) {
 
 	for {
 		err := s3Session.ListObjectsV2Pages(&s3.ListObjectsV2Input{
-			Bucket:     aws.String(s.Bucket),
-			Prefix:     aws.String(s.Prefix),
+			Bucket:     aws.String(p.Bucket),
+			Prefix:     aws.String(p.Value),
 			StartAfter: aws.String(startAfter),
 		}, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
 			if *page.KeyCount == 0 {
@@ -102,8 +102,8 @@ func (s *S3ObjectPrefix) GetTotalSize() (int64, int64, error) {
 	return count, totalSize, nil
 }
 
-func (s *S3ObjectPrefix) ListObjects() ([]S3Object, error) {
-	s3Session, err := NewS3Session(s.ServiceKey)
+func (p *S3ObjectKeyPrefix) ListObjects() ([]S3Object, error) {
+	s3Session, err := NewS3Session(p.ServiceKey)
 	if err != nil {
 		return nil, err
 	}
@@ -114,8 +114,8 @@ func (s *S3ObjectPrefix) ListObjects() ([]S3Object, error) {
 
 	for {
 		err := s3Session.ListObjectsV2Pages(&s3.ListObjectsV2Input{
-			Bucket:     aws.String(s.Bucket),
-			Prefix:     aws.String(s.Prefix),
+			Bucket:     aws.String(p.Bucket),
+			Prefix:     aws.String(p.Value),
 			FetchOwner: aws.Bool(true),
 			StartAfter: aws.String(startAfter),
 		}, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
@@ -126,7 +126,7 @@ func (s *S3ObjectPrefix) ListObjects() ([]S3Object, error) {
 				pageContents := page.Contents[i]
 				objectList = append(objectList, S3Object{
 					ServiceKey:   "",
-					Bucket:       s.Bucket,
+					Bucket:       p.Bucket,
 					ObjectKey:    *pageContents.Key,
 					ETag:         strings.ReplaceAll(*page.Contents[i].ETag, "\"", ""),
 					Size:         *pageContents.Size,
@@ -151,8 +151,8 @@ func (s *S3ObjectPrefix) ListObjects() ([]S3Object, error) {
 	return objectList, nil
 }
 
-func (s *S3ObjectPrefix) ListObjectsAfterTime(afterTime time.Time) ([]S3Object, error) {
-	s3Session, err := NewS3Session(s.ServiceKey)
+func (p *S3ObjectKeyPrefix) ListObjectsAfterTime(afterTime time.Time) ([]S3Object, error) {
+	s3Session, err := NewS3Session(p.ServiceKey)
 	if err != nil {
 		return nil, err
 	}
@@ -163,8 +163,8 @@ func (s *S3ObjectPrefix) ListObjectsAfterTime(afterTime time.Time) ([]S3Object, 
 
 	for {
 		err := s3Session.ListObjectsV2Pages(&s3.ListObjectsV2Input{
-			Bucket:     aws.String(s.Bucket),
-			Prefix:     aws.String(s.Prefix),
+			Bucket:     aws.String(p.Bucket),
+			Prefix:     aws.String(p.Value),
 			FetchOwner: aws.Bool(true),
 			StartAfter: aws.String(startAfter),
 		}, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
@@ -176,7 +176,7 @@ func (s *S3ObjectPrefix) ListObjectsAfterTime(afterTime time.Time) ([]S3Object, 
 					pageContents := page.Contents[i]
 					objectList = append(objectList, S3Object{
 						ServiceKey:   "",
-						Bucket:       s.Bucket,
+						Bucket:       p.Bucket,
 						ObjectKey:    *pageContents.Key,
 						ETag:         strings.ReplaceAll(*page.Contents[i].ETag, "\"", ""),
 						Size:         *pageContents.Size,
@@ -206,8 +206,8 @@ func (s *S3ObjectPrefix) ListObjectsAfterTime(afterTime time.Time) ([]S3Object, 
 	return objectList, nil
 }
 
-func (s *S3ObjectPrefix) ListObjectsBeforeTime(beforeTime time.Time) ([]S3Object, error) {
-	s3Session, err := NewS3Session(s.ServiceKey)
+func (p *S3ObjectKeyPrefix) ListObjectsBeforeTime(beforeTime time.Time) ([]S3Object, error) {
+	s3Session, err := NewS3Session(p.ServiceKey)
 	if err != nil {
 		return nil, err
 	}
@@ -218,8 +218,8 @@ func (s *S3ObjectPrefix) ListObjectsBeforeTime(beforeTime time.Time) ([]S3Object
 
 	for {
 		err := s3Session.ListObjectsV2Pages(&s3.ListObjectsV2Input{
-			Bucket:     aws.String(s.Bucket),
-			Prefix:     aws.String(s.Prefix),
+			Bucket:     aws.String(p.Bucket),
+			Prefix:     aws.String(p.Value),
 			FetchOwner: aws.Bool(true),
 			StartAfter: aws.String(startAfter),
 		}, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
@@ -228,7 +228,7 @@ func (s *S3ObjectPrefix) ListObjectsBeforeTime(beforeTime time.Time) ([]S3Object
 					pageContents := page.Contents[i]
 					objectList = append(objectList, S3Object{
 						ServiceKey:   "",
-						Bucket:       s.Bucket,
+						Bucket:       p.Bucket,
 						ObjectKey:    *pageContents.Key,
 						ETag:         strings.ReplaceAll(*page.Contents[i].ETag, "\"", ""),
 						Size:         *pageContents.Size,
@@ -254,8 +254,8 @@ func (s *S3ObjectPrefix) ListObjectsBeforeTime(beforeTime time.Time) ([]S3Object
 	return objectList, nil
 }
 
-func (s *S3ObjectPrefix) ListObjectsBetweenTimes(afterTime time.Time, beforeTime time.Time) ([]S3Object, error) {
-	s3Session, err := NewS3Session(s.ServiceKey)
+func (p *S3ObjectKeyPrefix) ListObjectsBetweenTimes(afterTime time.Time, beforeTime time.Time) ([]S3Object, error) {
+	s3Session, err := NewS3Session(p.ServiceKey)
 	if err != nil {
 		return nil, err
 	}
@@ -266,8 +266,8 @@ func (s *S3ObjectPrefix) ListObjectsBetweenTimes(afterTime time.Time, beforeTime
 
 	for {
 		err := s3Session.ListObjectsV2Pages(&s3.ListObjectsV2Input{
-			Bucket:     aws.String(s.Bucket),
-			Prefix:     aws.String(s.Prefix),
+			Bucket:     aws.String(p.Bucket),
+			Prefix:     aws.String(p.Value),
 			FetchOwner: aws.Bool(true),
 			StartAfter: aws.String(startAfter),
 		}, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
@@ -279,7 +279,7 @@ func (s *S3ObjectPrefix) ListObjectsBetweenTimes(afterTime time.Time, beforeTime
 					pageContents := page.Contents[i]
 					objectList = append(objectList, S3Object{
 						ServiceKey:   "",
-						Bucket:       s.Bucket,
+						Bucket:       p.Bucket,
 						ObjectKey:    *pageContents.Key,
 						ETag:         strings.ReplaceAll(*page.Contents[i].ETag, "\"", ""),
 						Size:         *pageContents.Size,
@@ -309,15 +309,15 @@ func (s *S3ObjectPrefix) ListObjectsBetweenTimes(afterTime time.Time, beforeTime
 	return objectList, nil
 }
 
-func (s *S3ObjectPrefix) DeleteObjects() error {
-	s3ObjectList, err := s.ListObjects()
+func (p *S3ObjectKeyPrefix) DeleteObjects() error {
+	s3ObjectList, err := p.ListObjects()
 	if err != nil {
 		log.Println("List Error")
 		return err
 	}
 
 	for i := range s3ObjectList {
-		s3ObjectList[i].ServiceKey = s.ServiceKey
+		s3ObjectList[i].ServiceKey = p.ServiceKey
 		err := s3ObjectList[i].Delete()
 		if err != nil {
 			log.Println("Delete Error")
