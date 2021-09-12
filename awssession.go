@@ -9,6 +9,7 @@ import (
 )
 
 func NewAWSSession(serviceKey string) (*session.Session, error) {
+	// TODO make serviceKey optional... if nil, then rely on os client
 	if serviceKey == "" {
 		return nil, errors.New("service key cannot be empty")
 	}
