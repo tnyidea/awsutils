@@ -6,9 +6,6 @@ import (
 	"strings"
 )
 
-// TODO is this really needed?  Can't we just to s3.New(awsSession) inline?
-
-// TODO this is a convenience function TBD if still needed
 func SplitS3Url(url string) (string, string, error) {
 	tokens := strings.Split(url, "//")
 	if len(tokens) != 2 {
