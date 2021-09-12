@@ -20,11 +20,6 @@ type S3NotificationRecord struct {
 	} `json:"s3"`
 }
 
-func (p *S3NotificationMessage) Bytes() []byte {
-	b, _ := json.Marshal(p)
-	return b
-}
-
 func (p *S3NotificationMessage) String() string {
 	b, _ := json.MarshalIndent(p, "", "    ")
 	return string(b)
