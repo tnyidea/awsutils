@@ -2,12 +2,13 @@ package ecsutils
 
 import (
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ecs"
 	"strings"
 )
 
 type ECSTask struct {
-	ServiceKey     string                  `json:"-"` // Should be private for output
+	AwsSession     *session.Session        `json:"-"`
 	TaskDefinition string                  `json:"taskDefinition"`
 	Network        ECSNetworkConfiguration `json:"network"`
 	Cluster        string                  `json:"cluster"`
@@ -22,10 +23,7 @@ type ECSNetworkConfiguration struct {
 }
 
 func (p *ECSTask) RunFargateTask() (r *ecs.RunTaskOutput, err error) {
-	ecsService, err := NewECSSession(p.ServiceKey)
-	if err != nil {
-		return nil, err
-	}
+	ecsService := ecs.New(p.AwsSession)
 
 	var envKeyValuePair []*ecs.KeyValuePair
 	for key, value := range p.Environment {
