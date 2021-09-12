@@ -63,6 +63,16 @@ func NewS3Object(awsSession *session.Session, bucket string, objectKey string) (
 	return s3Object, nil
 }
 
+func getBucketRegion(awsSession *session.Session, bucket string) (string, error) {
+	awsRegion := aws.StringValue(awsSession.Config.Region)
+	bucketRegion, err := s3manager.GetBucketRegion(aws.BackgroundContext(), awsSession, bucket, awsRegion)
+	if err != nil {
+		return "", err
+	}
+
+	return bucketRegion, nil
+}
+
 func NewS3ObjectFromS3Url(awsSession *session.Session, url string) (S3Object, error) {
 	bucket, objectKey, err := SplitS3Url(url)
 	if err != nil {
@@ -359,8 +369,9 @@ func (p *S3Object) DownloadReader() (io.ReadCloser, error) {
 	return ioutil.NopCloser(bytes.NewReader(s3DownloadBuffer.Bytes())), nil
 }
 
-// TODO have Rename replace the contents of p with target
 func (p *S3Object) Rename(targetObjectKey string, acl ...string) error {
+	// TODO have Rename replace the contents of p with target
+
 	target := *p
 	target.ObjectKey = targetObjectKey
 	err := p.MultipartCopy(target, acl...)
