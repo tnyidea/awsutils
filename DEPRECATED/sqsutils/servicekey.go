@@ -3,7 +3,7 @@ package sqsutils
 import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/sqs"
-	"github.com/fubotv/smo-content-operations/utils/awsutils"
+	"github.com/gbnyc26/awsutils"
 )
 
 // TODO make a version that can be passed as an encrypted hash

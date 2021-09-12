@@ -2,7 +2,6 @@ package s3utils
 
 import (
 	"encoding/json"
-	"reflect"
 )
 
 type S3NotificationMessage struct {
@@ -29,8 +28,4 @@ func (p *S3NotificationMessage) Bytes() []byte {
 func (p *S3NotificationMessage) String() string {
 	b, _ := json.MarshalIndent(p, "", "    ")
 	return string(b)
-}
-
-func (p *S3NotificationMessage) IsZero() bool {
-	return reflect.DeepEqual(*p, S3NotificationMessage{})
 }

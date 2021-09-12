@@ -3,36 +3,30 @@ package ssmutils
 import (
 	"encoding/json"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ssm"
 	"math"
-	"reflect"
 	"strings"
 )
 
 type SSMParameterStore struct {
-	ServiceKey string `json:"-"`
-	Path       string `json:"Path"`
+	AwsSession *session.Session `json:"-"`
+	KeyPrefix  string           `json:"keyPrefix"`
 }
 
-func NewSSMParameterStore(serviceKey string, path ...string) (r SSMParameterStore, err error) {
-	var pathValue string
-	if path != nil {
-		pathValue = path[0]
-		if !strings.HasPrefix(pathValue, "/") {
-			pathValue = "/" + pathValue
+func NewSSMParameterStore(awsSession *session.Session, keyPrefix ...string) SSMParameterStore {
+	var prefix string
+	if keyPrefix != nil {
+		prefix = keyPrefix[0]
+		if !strings.HasPrefix(prefix, "/") {
+			prefix = "/" + prefix
 		}
 	}
-	r = SSMParameterStore{
-		ServiceKey: serviceKey,
-		Path:       pathValue,
+
+	return SSMParameterStore{
+		AwsSession: awsSession,
+		KeyPrefix:  prefix,
 	}
-
-	return r, nil
-}
-
-func (p *SSMParameterStore) Bytes() []byte {
-	b, _ := json.Marshal(p)
-	return b
 }
 
 func (p *SSMParameterStore) String() string {
@@ -40,21 +34,15 @@ func (p *SSMParameterStore) String() string {
 	return string(b)
 }
 
-func (p *SSMParameterStore) IsZero() bool {
-	return reflect.DeepEqual(*p, SSMParameterStore{})
-}
+func (p *SSMParameterStore) GetParameter(key string) (string, error) {
+	ssmSession := ssm.New(p.AwsSession)
 
-func (p *SSMParameterStore) GetParameter(key string) (r string, err error) {
-	ssmSession, err := NewSSMSession(p.ServiceKey)
-	if err != nil {
-		return "", err
+	if p.KeyPrefix != "" {
+		key = p.KeyPrefix + "/" + key
 	}
 
-	if p.Path != "" {
-		key = p.Path + "/" + key
-	}
-
-	result, err := ssmSession.GetParameter(
+	var parameter string
+	output, err := ssmSession.GetParameter(
 		&ssm.GetParameterInput{
 			Name:           aws.String(key),
 			WithDecryption: aws.Bool(true),
@@ -63,34 +51,31 @@ func (p *SSMParameterStore) GetParameter(key string) (r string, err error) {
 	if err != nil {
 		return "", err
 	}
-	r = aws.StringValue(result.Parameter.Value)
+	parameter = aws.StringValue(output.Parameter.Value)
 
-	return r, nil
+	return parameter, nil
 }
 
-func (p *SSMParameterStore) GetParameters(keys []string) (r map[string]string, err error) {
-	ssmSession, err := NewSSMSession(p.ServiceKey)
-	if err != nil {
-		return nil, err
-	}
+func (p *SSMParameterStore) GetParameters(keys []string) (map[string]string, error) {
+	ssmSession := ssm.New(p.AwsSession)
 
-	if p.Path != "" {
+	if p.KeyPrefix != "" {
 		for i, key := range keys {
-			keys[i] = p.Path + "/" + key
+			keys[i] = p.KeyPrefix + "/" + key
 		}
 	}
 
-	r = make(map[string]string)
+	parameters := make(map[string]string)
 	lenKeys := len(keys)
 	pages := int(math.Ceil(float64(lenKeys) / 10))
 	for i := 0; i < pages; i++ {
 		sliceMin := i * 10
 		sliceMax := (i + 1) * 10
-		if sliceMax > len(keys) {
-			sliceMax = len(keys)
+		if sliceMax > lenKeys {
+			sliceMax = lenKeys
 		}
 
-		result, err := ssmSession.GetParameters(
+		output, err := ssmSession.GetParameters(
 			&ssm.GetParametersInput{
 				Names:          aws.StringSlice(keys[sliceMin:sliceMax]),
 				WithDecryption: aws.Bool(true),
@@ -100,14 +85,14 @@ func (p *SSMParameterStore) GetParameters(keys []string) (r map[string]string, e
 			return nil, err
 		}
 
-		for _, v := range result.Parameters {
-			key := aws.StringValue(v.Name)
-			if p.Path != "" {
-				key = strings.ReplaceAll(key, p.Path+"/", "")
+		for _, v := range output.Parameters {
+			k := aws.StringValue(v.Name)
+			if p.KeyPrefix != "" {
+				k = strings.ReplaceAll(k, p.KeyPrefix+"/", "")
 			}
-			r[key] = aws.StringValue(v.Value)
+			parameters[k] = aws.StringValue(v.Value)
 		}
 	}
 
-	return r, nil
+	return parameters, nil
 }

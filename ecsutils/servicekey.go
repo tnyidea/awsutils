@@ -2,7 +2,7 @@ package ecsutils
 
 import (
 	"github.com/aws/aws-sdk-go/service/ecs"
-	"github.com/fubotv/smo-content-operations/utils/awsutils"
+	"github.com/gbnyc26/awsutils"
 )
 
 func NewECSSession(serviceKey string) (*ecs.ECS, error) {

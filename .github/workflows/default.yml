@@ -1,0 +1,16 @@
+name: Default Workflow
+on: [push]
+jobs:
+  test_cases:
+    runs-on: ubuntu-latest
+    environment: test
+    env:
+      AWS_SERVICE_KEY: ${{ secrets.AWS_SERVICE_KEY }}
+    steps:
+      - name: Checkout Repository Code
+        uses: actions/checkout@v2
+      - name: Run Go Test
+        run: |
+          echo "TESTS DISABLED UNTIL CONFIGURED" && \
+          echo "go test -v ${{ github.workspace }}"
+      - run: echo "🍏 This job's status is ${{ job.status }}."
