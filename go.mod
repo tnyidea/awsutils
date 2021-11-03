@@ -1,8 +1,8 @@
-module github.com/gbnyc26/awsutils
+module github.com/tnyidea/awsutils
 
-go 1.16
+go 1.17
 
 require (
-	github.com/aws/aws-lambda-go v1.26.0
 	github.com/aws/aws-sdk-go v1.40.41
+	github.com/davecgh/go-spew v1.1.1 // indirect
 )
