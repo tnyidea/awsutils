@@ -1,4 +1,4 @@
-module github.com/tnyidea/awsutils
+module github.com/tnyidea/awsutils/go
 
 go 1.19
 
