@@ -1,4 +1,4 @@
-package awsutils
+package v1
 
 import (
 	"github.com/aws/aws-sdk-go/aws"
