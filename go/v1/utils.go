@@ -1,26 +1,15 @@
-package s3utils
+package v1
 
 import (
-	"errors"
 	"log"
 	"strings"
 )
 
 func SplitS3Url(url string) (string, string, error) {
-	tokens := strings.Split(url, "//")
-	if len(tokens) != 2 {
-		return "", "", errors.New("invalid S3 URL: must be of format s3://bucket-name/key-name")
-	}
-
-	tokens = strings.Split(tokens[1], "/")
-	if len(tokens) < 2 {
-		return "", "", errors.New("invalid S3 URL: must be of format s3://bucket-name/key-name")
-	}
-
-	return tokens[0], strings.Join(tokens[1:], "/"), nil
+	return splitS3Url(url)
 }
 
-func RenameUnsafeS3ObjectKey(s3ObjectKey string) (bool, string) {
+func RenameUnsafeS3ObjectKey(s3ObjectKey string) (string, bool) {
 	var targetObjectKey string
 
 	s3ObjectKeySpaces := strings.Contains(s3ObjectKey, " ")
@@ -71,5 +60,5 @@ func RenameUnsafeS3ObjectKey(s3ObjectKey string) (bool, string) {
 		log.Println("--- Object Key Colon Check Complete ---")
 	}
 
-	return renameS3ObjectKey, targetObjectKey
+	return targetObjectKey, renameS3ObjectKey
 }

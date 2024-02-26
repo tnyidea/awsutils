@@ -1,4 +1,4 @@
-package s3utils
+package v1
 
 import (
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -9,7 +9,7 @@ import (
 func TestGetTotalSize(t *testing.T) {
 	var awsSession *session.Session
 	var sourceObjectPrefix string
-	prefix, err := NewS3ObjectKeyPrefixFromS3Url(awsSession, sourceObjectPrefix)
+	prefix, err := NewS3BucketFromS3Url(awsSession, sourceObjectPrefix)
 	if err != nil {
 		log.Println(err)
 		t.FailNow()

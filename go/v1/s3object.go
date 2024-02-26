@@ -1,4 +1,4 @@
-package s3utils
+package v1
 
 import (
 	"bytes"
@@ -23,15 +23,18 @@ import (
 const S3ObjectMakePublic bool = true
 
 type S3Object struct {
-	AwsSession   *session.Session `json:"-"`
-	Region       string           `json:"region"`
-	Bucket       string           `json:"bucket"`
-	ObjectKey    string           `json:"objectKey"`
-	Exists       bool             `json:"exists"`
-	ETag         string           `json:"etag"`
-	Size         int64            `json:"size"`
-	StorageClass string           `json:"storageClass"`
-	LastModified time.Time        `json:"lastModified"`
+	AwsSession    *session.Session `json:"-"`
+	Region        string           `json:"region"`
+	Bucket        string           `json:"bucket"`
+	ObjectKey     string           `json:"objectKey"`
+	FileExtension string           `json:"fileExtension"`
+	FileType      string           `json:"fileType"`
+	Exists        bool             `json:"exists"`
+	ETag          string           `json:"etag"`
+	Size          int64            `json:"size"`
+	StorageClass  string           `json:"storageClass"`
+	LastModified  time.Time        `json:"lastModified"`
+	EventName     string           `json:"eventName"`
 }
 
 func NewS3Object(awsSession *session.Session, bucket string, objectKey string) (S3Object, error) {
@@ -42,6 +45,13 @@ func NewS3Object(awsSession *session.Session, bucket string, objectKey string) (
 		Exists:     true,
 	}
 
+	tokens := strings.Split(objectKey, ".")
+	if len(tokens) > 1 {
+		fileExtension := tokens[len(tokens)-1]
+		s3Object.FileExtension = "." + fileExtension
+		s3Object.FileType = "." + strings.ToLower(fileExtension)
+	}
+
 	bucketRegion, err := getBucketRegion(awsSession, s3Object.Bucket)
 	if err != nil {
 		return S3Object{}, errors.New("error locating bucket region: " + err.Error())
@@ -50,7 +60,8 @@ func NewS3Object(awsSession *session.Session, bucket string, objectKey string) (
 
 	err = s3Object.listObjectV2()
 	if err != nil {
-		if awsError, defined := err.(awserr.Error); defined {
+		var awsError awserr.Error
+		if errors.As(err, &awsError) {
 			code := awsError.Code()
 			if code == s3.ErrCodeNoSuchKey {
 				s3Object.Exists = false
@@ -63,18 +74,8 @@ func NewS3Object(awsSession *session.Session, bucket string, objectKey string) (
 	return s3Object, nil
 }
 
-func getBucketRegion(awsSession *session.Session, bucket string) (string, error) {
-	awsRegion := aws.StringValue(awsSession.Config.Region)
-	bucketRegion, err := s3manager.GetBucketRegion(aws.BackgroundContext(), awsSession, bucket, awsRegion)
-	if err != nil {
-		return "", err
-	}
-
-	return bucketRegion, nil
-}
-
 func NewS3ObjectFromS3Url(awsSession *session.Session, url string) (S3Object, error) {
-	bucket, objectKey, err := SplitS3Url(url)
+	bucket, objectKey, err := splitS3Url(url)
 	if err != nil {
 		return S3Object{}, err
 	}
@@ -82,9 +83,33 @@ func NewS3ObjectFromS3Url(awsSession *session.Session, url string) (S3Object, er
 	return NewS3Object(awsSession, bucket, objectKey)
 }
 
-func (p *S3Object) Bytes() []byte {
-	b, _ := json.Marshal(p)
-	return b
+func NewS3ObjectFromS3EventBytes(awsSession *session.Session, s3EventBytes []byte) (S3Object, error) {
+	var s3EventMessage S3EventMessage
+	err := json.Unmarshal(s3EventBytes, &s3EventMessage)
+	if err != nil {
+		return S3Object{}, err
+	}
+
+	return NewS3ObjectFromS3EventMessage(awsSession, s3EventMessage)
+}
+
+func NewS3ObjectFromS3EventMessage(awsSession *session.Session, s3EventMessage S3EventMessage) (S3Object, error) {
+	record := s3EventMessage.Records[0]
+	s3EventType := record.EventName
+
+	bucket := record.S3.Bucket.Name
+	objectKey := record.S3.Object.Key
+	if objectKey == "" {
+		return S3Object{}, errors.New("error: Object key is empty")
+	}
+
+	s3Object, err := NewS3Object(awsSession, bucket, objectKey)
+	if err != nil {
+		return S3Object{}, err
+	}
+	s3Object.EventName = s3EventType
+
+	return s3Object, nil
 }
 
 func (p *S3Object) String() string {
@@ -92,17 +117,17 @@ func (p *S3Object) String() string {
 	return string(b)
 }
 
-func (p *S3Object) Filename() string {
+func (p *S3Object) Filename() (string, error) {
+	if p.ObjectKey == "" {
+		return "", errors.New("invalid S3Object: ObjectKey is empty")
+	}
+
 	tokens := strings.Split(p.ObjectKey, "/")
-	return tokens[len(tokens)-1]
+	return tokens[len(tokens)-1], nil
 }
 
 func (p *S3Object) S3Url() (string, error) {
-	if p.Bucket == "" || p.ObjectKey == "" {
-		return "", errors.New("invalid S3 URL: must specify both Bucket and Object Key")
-	}
-
-	return "s3://" + p.Bucket + "/" + p.ObjectKey, nil
+	return newS3UrlFromS3Object(*p)
 }
 
 func (p *S3Object) listObjectV2() error {
@@ -338,6 +363,18 @@ func (p *S3Object) Delete() error {
 	return nil
 }
 
+func (p *S3Object) Rename(targetObjectKey string, acl ...string) error {
+	// TODO have Rename replace the contents of p with target
+
+	target := *p
+	target.ObjectKey = targetObjectKey
+	err := p.MultipartCopy(target, acl...)
+	if err != nil {
+		return err
+	}
+	return p.Delete()
+}
+
 func (p *S3Object) DownloadBytes() ([]byte, error) {
 	var b []byte
 	s3DownloadBuffer := aws.NewWriteAtBuffer(b)
@@ -367,18 +404,6 @@ func (p *S3Object) DownloadReader() (io.ReadCloser, error) {
 	}
 
 	return ioutil.NopCloser(bytes.NewReader(s3DownloadBuffer.Bytes())), nil
-}
-
-func (p *S3Object) Rename(targetObjectKey string, acl ...string) error {
-	// TODO have Rename replace the contents of p with target
-
-	target := *p
-	target.ObjectKey = targetObjectKey
-	err := p.MultipartCopy(target, acl...)
-	if err != nil {
-		return err
-	}
-	return p.Delete()
 }
 
 func (p *S3Object) UploadBytes(uploadBytes []byte, acl ...string) error {
