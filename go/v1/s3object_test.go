@@ -1,4 +1,4 @@
-package v1
+package awsutils
 
 import (
 	"github.com/aws/aws-sdk-go/aws/session"
