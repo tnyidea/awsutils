@@ -5,13 +5,15 @@ import typing
 import boto3
 import pytz
 
-import awsutils
+from .s3_bucket import get_bucket_region
+from .s3_url import split_s3_url
+from .session import Session
 
 
 @dataclasses.dataclass
 class S3Object:
     """S3Object class"""
-    aws_session: boto3.session.Session = None
+    session: Session = None
     region: str = ''
     bucket: str = ''
     object_key: str = ''
@@ -24,10 +26,15 @@ class S3Object:
     last_modified: datetime.datetime = datetime.datetime(1, 1, 1, 0, 0, 0, 0, tzinfo=pytz.utc)
     event_name: str = ''
 
+    def s3_url(self):
+        if self.bucket == '' or self.object_key == '':
+            return '', ValueError('invalid S3Object: must specify both bucket and object_key values')
+
+        return f's3://{self.bucket}/{self.object_key}', None
+
     def _list_object_v2(self) -> [typing.Optional[Exception]]:
-        try:
-            s3_client = self.aws_session.client('s3')
-        except Exception as e:
+        s3_client, e = self.session.s3_client()
+        if e is not None:
             return e
 
         try:
@@ -53,8 +60,11 @@ class S3Object:
         return None
 
     def copy(self, target, acl: str = '') -> [typing.Optional[Exception]]:
+        s3_client, e = self.session.s3_client()
+        if e is not None:
+            return e
+
         try:
-            s3_client = self.aws_session.client('s3')
             _ = s3_client.copy_object(
                 ACL=acl,
                 CopySource=f'/{self.bucket}/{self.object_key}',
@@ -67,8 +77,11 @@ class S3Object:
         return None
 
     def download_bytes(self) -> [bytes, typing.Optional[Exception]]:
+        s3_client, e = self.session.s3_client()
+        if e is not None:
+            return e
+
         try:
-            s3_client = self.aws_session.client('s3')
             response = s3_client.get_object(Bucket=self.bucket, Key=self.object_key)
             b = response['Body'].read()
         except Exception as e:
@@ -77,8 +90,11 @@ class S3Object:
         return b, None
 
     def upload_bytes(self, b: bytes) -> [typing.Optional[Exception]]:
+        s3_client, e = self.session.s3_client()
+        if e is not None:
+            return e
+
         try:
-            s3_client = self.aws_session.client('s3')
             _ = s3_client.put_object(Bucket=self.bucket, Key=self.object_key, Body=b)
             self._list_object_v2()
         except Exception as e:
@@ -87,10 +103,10 @@ class S3Object:
         return None
 
 
-def new_s3_object(aws_session: boto3.session.Session, bucket: str, object_key: str) \
-        -> [awsutils.S3Object, typing.Optional[Exception]]:
+def new_s3_object(aws_session: Session, bucket: str, object_key: str) \
+        -> [S3Object, typing.Optional[Exception]]:
     s3_object = S3Object()
-    s3_object._aws_session = aws_session
+    s3_object.aws_session = aws_session
     s3_object.bucket = bucket
     s3_object.object_key = object_key
 
@@ -100,7 +116,7 @@ def new_s3_object(aws_session: boto3.session.Session, bucket: str, object_key: s
         s3_object.file_extension = f'.{file_extension}'
         s3_object.file_type = f'.{file_extension.lower()}'
 
-        bucket_region, e = awsutils.get_bucket_region(s3_object.aws_session, s3_object.bucket)
+        bucket_region, e = get_bucket_region(s3_object.aws_session, s3_object.bucket)
         if e is not None:
             return None, e
 
@@ -110,9 +126,11 @@ def new_s3_object(aws_session: boto3.session.Session, bucket: str, object_key: s
         if e is not None:
             return None, e
 
+    return s3_object, None
+
 
 def new_s3_object_from_s3_url(aws_session: boto3.session.Session, url: str) \
-        -> [awsutils.S3Object, typing.Optional[Exception]]:
-    bucket, object_key = awsutils.split_s3_url(url)
+        -> [S3Object, typing.Optional[Exception]]:
+    bucket, object_key = split_s3_url(url)
 
-    return new_s3_object(aws_session, bucket, object_key)
+    return new_s3_object(aws_session, bucket, object_key), None
