@@ -103,8 +103,13 @@ class S3Object:
         return None
 
 
-def new_s3_object(aws_session: Session, bucket: str, object_key: str) \
-        -> [S3Object, typing.Optional[Exception]]:
+def new_s3_object_from_s3_url(aws_session: boto3.session.Session, url: str) -> S3Object:
+    bucket, object_key = split_s3_url(url)
+
+    return new_s3_object(aws_session, bucket, object_key)
+
+
+def new_s3_object(aws_session: Session, bucket: str, object_key: str) -> S3Object:
     s3_object = S3Object()
     s3_object.aws_session = aws_session
     s3_object.bucket = bucket
@@ -127,10 +132,3 @@ def new_s3_object(aws_session: Session, bucket: str, object_key: str) \
             return None, e
 
     return s3_object, None
-
-
-def new_s3_object_from_s3_url(aws_session: boto3.session.Session, url: str) \
-        -> [S3Object, typing.Optional[Exception]]:
-    bucket, object_key = split_s3_url(url)
-
-    return new_s3_object(aws_session, bucket, object_key), None

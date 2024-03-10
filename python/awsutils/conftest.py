@@ -1,6 +1,5 @@
 import logging
 import os
-import time
 
 import boto3.session
 import pytest
@@ -10,7 +9,6 @@ from .s3_bucket import new_s3_bucket
 from .session import Session, new_session_from_config
 
 
-# @pytest.fixture(scope="module", autouse=True)
 @pytest.fixture(scope='session')
 def setup(request):
     os.environ['AWS_REGION'] = 'us-east-2'
