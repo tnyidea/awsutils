@@ -1,8 +1,8 @@
 import datetime
 import dataclasses
-import typing
 
 import boto3
+import botocore.exceptions
 import pytz
 
 from .s3_bucket import get_bucket_region
@@ -19,12 +19,30 @@ class S3Object:
     object_key: str = ''
     file_extension: str = ''
     file_type: str = ''
-    exists: bool = False
     etag: str = ''
     size: int = 0
     storage_class: str = ''
     last_modified: datetime.datetime = datetime.datetime(1, 1, 1, 0, 0, 0, 0, tzinfo=pytz.utc)
     event_name: str = ''
+
+    def exists(self) -> bool:
+        try:
+            s3_client = self.session.s3_client()
+
+            # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/head_object.html
+            _ = s3_client.head_object(
+                Bucket=self.bucket,
+                Key=self.object_key,
+            )
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == '404':
+                return False
+            else:
+                raise e
+        except Exception as e:
+            raise e
+
+        return True
 
     def s3_url(self):
         if self.bucket == '' or self.object_key == '':
@@ -32,39 +50,36 @@ class S3Object:
 
         return f's3://{self.bucket}/{self.object_key}', None
 
-    def _list_object_v2(self) -> [typing.Optional[Exception]]:
-        s3_client, e = self.session.s3_client()
-        if e is not None:
-            return e
+    def _head_object(self) -> None:
+        s3_client = self.session.s3_client()
 
         try:
-            response = s3_client.list_objects_v2(
+            # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/head_object.html
+            response = s3_client.head_object(
                 Bucket=self.bucket,
-                MaxKeys=1,
-                Prefix=self.object_key,
+                Key=self.object_key,
             )
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == '404':
+                return None
+            else:
+                raise e
         except Exception as e:
-            return e
+            raise e
 
-        if response['KeyCount'] != 1:
-            self.exists = False
-            return None
-
-        response_item = response['Contents'][0]
-        self.exists = True
-        self.etag = response_item['ETag']
-        self.size = response_item['Size']
-        self.storage_class = response_item['StorageClass']
-        self.last_modified = response_item['LastModified']
+        self.etag = response['ETag']
+        self.size = response['ContentLength']
+        # self.storage_class = response_item['StorageClass']
+        self.last_modified = response['LastModified']
+        self.content_type = response['ContentType']
 
         return None
 
-    def copy(self, target, acl: str = '') -> [typing.Optional[Exception]]:
-        s3_client, e = self.session.s3_client()
-        if e is not None:
-            return e
+    def copy(self, target, acl: str = '') -> None:
+        s3_client = self.session.s3_client()
 
         try:
+            # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/copy_object.html
             _ = s3_client.copy_object(
                 ACL=acl,
                 CopySource=f'/{self.bucket}/{self.object_key}',
@@ -72,46 +87,54 @@ class S3Object:
                 Key=target.key,
             )
         except Exception as e:
-            return e
+            raise e
 
         return None
 
-    def download_bytes(self) -> [bytes, typing.Optional[Exception]]:
-        s3_client, e = self.session.s3_client()
-        if e is not None:
-            return e
+    def download_bytes(self) -> bytes:
+        s3_client = self.session.s3_client()
 
         try:
-            response = s3_client.get_object(Bucket=self.bucket, Key=self.object_key)
+            # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/get_object.html
+            response = s3_client.get_object(
+                Bucket=self.bucket,
+                Key=self.object_key,
+            )
             b = response['Body'].read()
         except Exception as e:
-            return None, e
+            raise e
 
-        return b, None
+        return b
 
-    def upload_bytes(self, b: bytes) -> [typing.Optional[Exception]]:
-        s3_client, e = self.session.s3_client()
-        if e is not None:
-            return e
+    def upload_bytes(self, b: bytes) -> None:
+        s3_client = self.session.s3_client()
 
         try:
-            _ = s3_client.put_object(Bucket=self.bucket, Key=self.object_key, Body=b)
-            self._list_object_v2()
+            # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/put_object.html
+            _ = s3_client.put_object(
+                Bucket=self.bucket,
+                Key=self.object_key,
+                Body=b,
+            )
+            self._head_object()
         except Exception as e:
-            return e
+            raise e
 
         return None
 
 
 def new_s3_object_from_s3_url(aws_session: boto3.session.Session, url: str) -> S3Object:
-    bucket, object_key = split_s3_url(url)
+    try:
+        split_url = split_s3_url(url)
+    except Exception as e:
+        raise e
 
-    return new_s3_object(aws_session, bucket, object_key)
+    return new_s3_object(aws_session, split_url['bucket'], split_url['object_key'])
 
 
 def new_s3_object(aws_session: Session, bucket: str, object_key: str) -> S3Object:
     s3_object = S3Object()
-    s3_object.aws_session = aws_session
+    s3_object.session = aws_session
     s3_object.bucket = bucket
     s3_object.object_key = object_key
 
@@ -121,14 +144,11 @@ def new_s3_object(aws_session: Session, bucket: str, object_key: str) -> S3Objec
         s3_object.file_extension = f'.{file_extension}'
         s3_object.file_type = f'.{file_extension.lower()}'
 
-        bucket_region, e = get_bucket_region(s3_object.aws_session, s3_object.bucket)
-        if e is not None:
-            return None, e
-
+        try:
+            bucket_region = get_bucket_region(s3_object.session, s3_object.bucket)
+            s3_object._head_object()
+        except Exception as e:
+            raise e
         s3_object.region = bucket_region
 
-        e = s3_object._list_object_v2()
-        if e is not None:
-            return None, e
-
-    return s3_object, None
+    return s3_object
