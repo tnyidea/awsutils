@@ -1,5 +1,5 @@
 setuptools.setup(
     name='awsutils',
-    version='0.0.4',
-    packages=packages=['./python/*'],
+    version='0.0.5',
+    packages=['./python/*'],
 )
