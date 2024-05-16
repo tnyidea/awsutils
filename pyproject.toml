@@ -1,0 +1,17 @@
+[project]
+name = "awsutils"
+version = "0.0.8"
+description = "A collection of convenience libraries for popular AWS Services"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "LICENSE.md"}
+urls = {source = "https://github.com/tnyidea/awsutils"}
+
+dependencies = [
+    "boto3",
+    "botocore",
+]
+
+[tool.setuptools.packages.find]
+where = ["python"]
+include = ["awsutils"]
